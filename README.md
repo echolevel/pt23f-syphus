@@ -9,3 +9,16 @@ Some new changes worthy of a mention:
 3) A ton of other bugs have been fixed
 
 The asm syntax is AsmOne/AsmPro, and it may not be compatible with other assemblers.
+
+
+## Syphus' fork notes:
+
+This fork is so I can maintain a few customisations of my own.
+
+They are:
+* Custom UI and About screen
+* Automatically displaying the About screen on startup, and allowing it to be shown again later (just a vanity feature!)
+* Force default editskip to 0, rather than 1
+
+They might soon include:
+* Some MIDI tweaks/improvements
