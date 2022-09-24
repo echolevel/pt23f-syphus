@@ -21,6 +21,12 @@
 ; I did the rest of the 128kB compatibility patching.
 ;
 
+; Syphus' fork - custom graphics, default editstep=0, experimental MIDI
+;
+; Note: ASMPro won't build 8bitbubsy's version unless I change AccidentalText to something that
+; breaks the 'b' (flat) notation mode. Not sure why - presumably some encoding issue between Windows
+; and ASMPro. I literally never use that option, but if you do, you might want to  research a fix...
+
 SongSize100Patt		EQU 1084+(1024*100)
 SongSize64Patt		EQU 1084+(1024*64)
 
@@ -6015,6 +6021,12 @@ CheckAltKeys
 	BEQ.B	xSampler
 	CMP.B	#16,D0 ; Q
 	BEQ.W	ChkQuit
+
+	; bren 2019 - alt-key for About screen?
+	CMP.B #17,D0 ; W
+	ST AboutScreenShown ; Syphus Nov 2016
+ 	BEQ.W	 ShowAboutScreen ; Syphus Nov 2016
+
 	CMP.B	#21,D0 ; Y
 	BEQ.W	SaveAllSamples
 	CMP.B	#55,D0 ; M
@@ -8431,7 +8443,7 @@ EditMoveDown
 	AND.W	#$003F,ScrPattPos
 	BRA.W	SetScrPatternPos
 
-EditMoveAdd	dc.w 1
+EditMoveAdd	dc.w 0; syphus - force this to be 0 by default
 
 RightArrow
 	TST.W	ArrowPressed
@@ -9269,7 +9281,7 @@ caloop	MOVE.W	D0,(A1)+
 	CLR.L	TimerTicks
 	CLR.W	BlockMarkFlag
 	CLR.B	MetroFlag
-	MOVE.W	#1,EditMoveAdd
+	MOVE.W   #0,EditMoveAdd ; syphus - set default editstep to 0 instead of 1
 	MOVEQ	#0,D0
 	MOVE.W	DefaultSpeed,D0
 	MOVE.L	D0,CurrSpeed
@@ -9950,7 +9962,7 @@ shacskp	MOVEQ	#1,D0
 	JSR	ShowText3
 	BRA	RedrawPattern
 
-AccidentalText	dc.b '#¡'
+AccidentalText	dc.b '#�'; syphus - encoding fix
 
 Return5
 	RTS
@@ -10863,7 +10875,7 @@ PrintNote
 	ADD.L	NoteNamesPtr,D0
 	MOVE.L	D0,A0
 	MOVE.L	(A0),(A5)+
-	CMP.B	#'¡',-3(A5)
+	CMP.B	#'b',-3(A5)	
 	BNE.B	prnoxyz
 	MOVE.B	#'b',-3(A5)
 prnoxyz	ADDQ	#1,A5
@@ -23377,14 +23389,14 @@ ivok	ADDQ.W	#1,D2		; this is needed for the new invertrange routine
 	BLS.B	ivok2		; -
 	MOVE.W	#317,D2		; -
 ivok2	MOVEQ	#0,D1
-	MOVEQ	#64,D3
-	MOVE.L	A4,-(SP)
-	MOVE.L	A5,-(SP)
+  MOVEQ	#64,D3
+  MOVE.L	A4,-(SP)
+  MOVE.L	A5,-(SP)
 	MOVE.L	GfxBase(PC),A6
 	JSR	_LVOOwnBlitter(A6)
 	JSR	_LVOWaitBlit(A6)
 	MOVE.L	LineScreenPtr(PC),A4
-	LEA	$DFF000,A6
+  LEA	$DFF000,A6
 ivwait1	BTST	#6,2(A6)
 	BNE.B	ivwait1
 	MOVE.L	A4,A5
@@ -26278,7 +26290,7 @@ exeReplayRelocHunk	INCBIN "bin/reloc32hunk.bin"
 ;---- Graphics Data ----
 
 SpectrumAnaSize	= 839
-AboutBoxSize	= 1730
+AboutBoxSize       = 2611 ; ptakira_grunge syphus 2016
 ScopeSize	= 1713
 DirScreenSize	= 2882
 PLSTSize	= 1896-8
@@ -26301,7 +26313,7 @@ SpectrumAnaData	INCBIN "pak/ptspectrumana.pak"
 	cnop 0,4
 ScopeData	INCBIN "pak/ptscope.pak"
 	cnop 0,4
-AboutBoxData	INCBIN "pak/ptaboutbox.pak"
+AboutBoxData    INCBIN "pak/ptakira_grunge.pak" ; syphus 2016
 	cnop 0,4
 SureBoxData	INCBIN "raw/ptsurebox.raw"
 	cnop 0,4
@@ -26473,7 +26485,7 @@ ScopeDeltaTab
 	SECTION ptdata,DATA_C
 
 	cnop 0,4
-BitplaneData	INCBIN "raw/ptmainscreen.raw"
+BitplaneData	INCBIN "raw/ptmainscreen_sys.raw" ; syphus 2016
 
 TopMenusPos	EQU	BitplaneData+55
 Setup2Menus	EQU	BitplaneData+506
