@@ -23,9 +23,9 @@
 
 ; Syphus' fork - custom graphics, default editstep=0, experimental MIDI
 ;
-; Note: ASMPro won't build 8bitbubsy's version unless I change AccidentalText to something that
-; breaks the 'b' (flat) notation mode. Not sure why - presumably some encoding issue between Windows
-; and ASMPro. I literally never use that option, but if you do, you might want to  research a fix...
+; Note: if editing this file in Windows and assembling in ASMPro on Amiga 
+; hardware or in WinUAE, change this file's encoding from UTF-8 to ISO 8859-1
+; or else 'b'/flat accidental mode will be broken.
 
 SongSize100Patt		EQU 1084+(1024*100)
 SongSize64Patt		EQU 1084+(1024*64)
@@ -9962,7 +9962,7 @@ shacskp	MOVEQ	#1,D0
 	JSR	ShowText3
 	BRA	RedrawPattern
 
-AccidentalText	dc.b '#ï¿½'; syphus - encoding fix
+AccidentalText	dc.b '#¡'; syphus - encoding fix
 
 Return5
 	RTS
@@ -10875,7 +10875,7 @@ PrintNote
 	ADD.L	NoteNamesPtr,D0
 	MOVE.L	D0,A0
 	MOVE.L	(A0),(A5)+
-	CMP.B	#'b',-3(A5)	
+	CMP.B	#'¡',-3(A5)	
 	BNE.B	prnoxyz
 	MOVE.B	#'b',-3(A5)
 prnoxyz	ADDQ	#1,A5
@@ -21713,6 +21713,8 @@ mno_veloc
 	BLS.B	J_nkp
 	RTS
 miplskip
+	; This is what we don't want to happen - some arbitrary NoteOn messages being used for Play/Stop/Record etc! 
+	; I can only assume this was implemented by someone who had a MIDI keyboard (more likely a synth) with no transport controls
 	CMP.B	XMIDI_Play(PC),D0
 	BEQ.B	J_PlaySong
 	CMP.B	XMIDI_Pattern(PC),D0
@@ -21826,6 +21828,7 @@ MIDISysMessage
 	BEQ.B	M_EOX		; End of System Exclusive
 	CMP.B	#$F8,D0
 	BEQ.B	M_rts		; MIDI Timing Clock
+	;BEQ.B	M_Clock		; syphus - some clock-handling routine?
 	CMP.B	#$F9,D0
 	BEQ.B	M_rts		; -Reserved-
 	CMP.B	#$FA,D0
@@ -21850,6 +21853,7 @@ M_EOX		RTS
 M_Start		JMP	PlaySong
 M_Continue	RTS
 M_Stop		JMP	StopIt
+;M_Clock		JMP PlayPattern ; syphus - some clock-handling routine?
 
 	cnop 0,4
 MIDIinBuffer	dc.l 0
@@ -25594,9 +25598,9 @@ NoteNames1
 SpcNoteText
 	dc.b	'--- '
 NoteNames2
-	dc.b	'C-1 DÂ¡1 D-1 EÂ¡1 E-1 F-1 GÂ¡1 G-1 AÂ¡1 A-1 BÂ¡1 B-1 '
-	dc.b	'C-2 DÂ¡2 D-2 EÂ¡2 E-2 F-2 GÂ¡2 G-2 AÂ¡2 A-2 BÂ¡2 B-2 '
-	dc.b	'C-3 DÂ¡3 D-3 EÂ¡3 E-3 F-3 GÂ¡3 G-3 AÂ¡3 A-3 BÂ¡3 B-3 '
+	dc.b	'C-1 D¡1 D-1 E¡1 E-1 F-1 G¡1 G-1 A¡1 A-1 B¡1 B-1 '
+	dc.b	'C-2 D¡2 D-2 E¡2 E-2 F-2 G¡2 G-2 A¡2 A-2 B¡2 B-2 '
+	dc.b	'C-3 D¡3 D-3 E¡3 E-3 F-3 G¡3 G-3 A¡3 A-3 B¡3 B-3 '
 	dc.b	'--- '
 
 	; this LUT prevents MULU for getting correct period section
