@@ -5278,9 +5278,12 @@ SongPosToZero
 
 ;---- Play Pattern ----
 
-PlayPattern
+PlayPattern			
+	MOVE.W	MidiStartMsg,A0 
+	MOVE.W	MidiMsgLen,D0
+	JSR		AddMIDIData		
 	CMP.W	#8,CurrScreen
-	BEQ.W	lbC009F6C
+	BEQ.W	lbC009F6C	
 ppskip
 	MOVEQ	#0,D0
 PattFrom
@@ -5297,8 +5300,11 @@ wfbu2	BTST	#6,$BFE001	; left mouse button
 	CLR.B	RawKeyCode
 	CLR.B	SaveKey
 	MOVE.L	#'patt',RunMode
-	BSR.W	SetPlayPtrCol
+	BSR.W	SetPlayPtrCol		
 	RTS
+
+MidiStartMsg	dc.w	$f8 
+MidiMsgLen		dc.w	1
 
 ;---- Record Pattern/Song ----
 
@@ -6024,8 +6030,10 @@ CheckAltKeys
 
 	; bren 2019 - alt-key for About screen?
 	CMP.B #17,D0 ; W
+	;MOVE.W	#$3f8,$dff030 ; syphus - SERDAT
 	ST AboutScreenShown ; Syphus Nov 2016
- 	BEQ.W	 ShowAboutScreen ; Syphus Nov 2016
+ 	BEQ.W	 ShowAboutScreen ; Syphus Nov 2016	
+	
 
 	CMP.B	#21,D0 ; Y
 	BEQ.W	SaveAllSamples
@@ -6662,7 +6670,7 @@ xSamCop	JMP	SamCopy
 xSamPas	JMP	SamPaste
 
 StepPlayForward
-	MOVE.W	#1,StepPlayEnable
+	MOVE.W	#1,StepPlayEnable	
 	BSR.W	DoStopIt
 	MOVE.W	ScrPattPos,D0
 	BSR.W	pafr1
@@ -15290,8 +15298,10 @@ UpdateMod
 	ASR.L	#8,D1
 	ASR.L	#4,D1
 	MOVE.L	D1,D3
-	AND.W	#$1F,D1
-	LEA	VibratoTable(PC),A0
+	AND.W	#$1F,D1	
+	;LEA	VibratoTable(PC),A0
+	LEA 	VibratoTable,A0 ; syphus - fixes an out-of-range 16 bit error caused by addition of MIDI Out code
+	ADD.L 	(PC),A0
 	MOVEQ	#0,D0
 	MOVE.B	(A0,D1.W),D0
 	LSR.B	#2,D0
@@ -21499,12 +21509,12 @@ omidisk	CLR.B	MIDIinTo
 	SNE	PrevBits
 	BTST	#11,D0
 	SNE	PrevBits+1
-	MOVEQ	#0,D0		;TBE
+	MOVEQ	#0,D0		;TBE (Serial Transmit Buffer Empty)
 	LEA	MIDIOutInterrupt(PC),A1
 	MOVE.L	4.W,A6
 	JSR	_LVOSetIntVector(A6)
 	MOVE.L	D0,PrevTBE
-	MOVEQ	#11,D0		;RBF
+	MOVEQ	#11,D0		;RBF (Serial Receive Buffer Full)
 	LEA	MIDIInInterrupt(PC),A1
 	JSR	_LVOSetIntVector(A6)
 	MOVE.L	D0,PrevRBF
@@ -21581,21 +21591,97 @@ gmiexit
 
 ;----- MIDI Transmit Buffer Empty Interrupt (Output) -----
 
-MIDIOutIntHandler
-	MOVE.W	#$4000,intena(A0)	;disable int.
-	MOVE.W	#1,intreq(A0)		;clear intreq bit
-	RTS
+; syphus - this is called whenever a byte is written to SERDAT, after that byte has been transmitted
+; e.g.
+; MOVE.W	#$3f8,$dff030	; Write MIDI clock byte
+;
+; 2022-09-26 - doesn't work yet. Using some VERY old code from PT 1.2e as a guide 
+; https://github.com/rauls/amiga-protracker1.2e/blob/master/pt12e.s
+;
+; This source from PT 2.0a is less useful - I *think* it's just echoing input to output, which maybe made sense for MIDI thru
+; https://pastebin.com/76XnLqhj
 
-	cnop 0,4
+
+MIDIOutIntHandler		
+	MOVE	#$4000,intena(A0)	;disable int.
+	JSR	_LVOForbid(A6)	; turn multitasking off
+	MOVE	#1,intreq(A0)		;clear intreq bit
+	MOVE.B	bytesinbuff(PC),D0
+	BEQ.S	exsih			;buffer empty
+	MOVE.L	4(A1),A5		;get buffer read pointer
+	MOVE	#$100,D1		;Stop bit
+	MOVE.B	(A5),D1			;get byte
+	MOVE	D1,$030(A0)		;and push it out!!
+	ADDQ.L	#1,A5			;add 1
+	CMP.L	A1,A5			;shall we reset ptr??
+	BNE.S	nbufptr			;not yet..
+	LEA	sendbuffer(PC),A5
+nbufptr	SUBQ.B	#1,D0			;one less bytes in buffer
+	MOVE.B	D0,bytesinbuff		;remember it
+	MOVE.L	A5,4(A1)		;push new read pointer back
+exsih	JSR	_LVOPermit(A6)	; multitasking back on
+	BGE.S	exsih0
+	MOVE	#$C000,intena(A0)
+exsih0	RTS
+	
+;----- Send data to MIDI out/output buffer -----
+; A0=ptr to data, D0=length
+
+;move.w	d0,$dff180 ; syphus flash screen
+
+AddMIDIData	
+	TST.B	SerPortAlloc
+	BEQ.S	retamd
+	MOVE.L	A2,-(SP)
+	MOVE.L	4.W,A6
+	MOVE	#$4000,$DFF09A ; disable interrupts
+	JSR		_LVOForbid(A6) ; disable multitasking
+	MOVE.B	bytesinbuff(pc),D1	
+	BNE.S	noTBEreq
+	MOVE	#$8001,$DFF09C ; request TBE	
+
+noTBEreq
+	LEA		buffptr(PC),A2 	; end of buffer (ptr)
+	MOVE.L  (A2),A1			; buffer pointer
+
+adddataloop
+	MOVE.B	(A0)+,D1	;get byte
+	BPL.S	norscheck	;this isn't a status byte
+	CMP.B	#$EF,D1		;forget system messages
+	BHI.S	norscheck
+	CMP.B	lastcmdbyte(PC),D1 ;same as previos status byte??
+	BEQ.S	samesb		;yes, skip
+	MOVE.B	D1,lastcmdbyte	;no, don't skip but remember!!
+
+norscheck
+	MOVE.B	D1,(A1)+	;push it to midi send buffer
+	ADDQ.B	#1,bytesinbuff
+samesb	CMP.L	A2,A1	;end of buffer??
+	BNE.S	noresbuffptr	;no, no!!
+	LEA	sendbuffer(pc),a1 ;better reset it to avoid trashing
+noresbuffptr
+	SUBQ.B	#1,D0
+	BNE.S	adddataloop
+	MOVE.L	A1,(A2)		;push new buffer ptr back
+overflow
+	JSR	_LVOPermit(A6)	; enable multitasking again
+	BGE.S	retamd1
+	MOVE	#$C000,$DFF09A	;enable interrupts again
+retamd1	MOVE.L	(SP)+,A2
+retamd	RTS
+
+
+	
 PrevTBE		dc.l 0
 PrevRBF		dc.l 0
 PrevBits	dc.b 0,0
 
-	cnop 0,4
+	
 MIDIOutInterrupt
 	dc.l 0,0
 	dc.b 2,0
-	dc.l MIDIOutName,lbL012076,MIDIOutIntHandler
+	;dc.l MIDIOutName,lbL012076,MIDIOutIntHandler
+	dc.l	MIDIOutName, buffptr, MIDIOutIntHandler
 
 	cnop 0,4
 MIDIInInterrupt
@@ -21604,19 +21690,30 @@ MIDIInInterrupt
 	dc.l MIDIInName,MIDIinBuffer,MIDIInIntHandler
 
 	cnop 0,4
-lbL012076
-	dc.l SerPortAlloc
-	dc.l SerPortAlloc
+;lbL012076
+;	dc.l SerPortAlloc
+;	dc.l SerPortAlloc
+
+; MIDI out
+buffptr 		dc.l 	sendbuffer
+readbuffptr 	dc.l	sendbuffer
+sendbuffer		ds.b 	128
 
 SerPortAlloc	dc.b 0
-lastcmdbyte	dc.b 0
-	cnop 0,4
+bytesinbuff		dc.b 	0
 MiscResBase	dc.l 0
+lastcmdbyte	dc.b 0
 
 MIDIOutName	dc.b 'PT MIDI Out',0
 MIDIInName	dc.b 'PT MIDI In',0
 MiscResName	dc.b 'misc.resource',0
 SerDevName	dc.b 'serial.device',0,0
+
+
+
+
+	cnop 0,4
+
 
 ;----- read from input buffer -----
 
@@ -21632,6 +21729,7 @@ migetbyt
 	ADDQ.B	#1,MIDIinFrom
 	MOVEQ	#0,D1
 	RTS
+
 
 CheckMIDIin
 	TST.B	MIDIFlag
@@ -21853,7 +21951,10 @@ M_EOX		RTS
 M_Start		JMP	PlaySong
 M_Continue	RTS
 M_Stop		JMP	StopIt
-;M_Clock		JMP PlayPattern ; syphus - some clock-handling routine?
+;M_Clock		JMP NotifyClock ; syphus - some clock-handling routine?
+
+	
+
 
 	cnop 0,4
 MIDIinBuffer	dc.l 0
@@ -24132,14 +24233,14 @@ audchan4temp
 	dc.w $0008	; voice #4 DMA bit
 	dcb.b 34
 
-IntMusic
+IntMusic	; syphus - Is this where I should fire MIDI writes?	
 	MOVEM.L	D0-D7/A0-A6,-(SP)
-	MOVE.L	RunMode(PC),D0
+	MOVE.L	RunMode(PC),D0	
 	BEQ.W	NoNewPositionYet
 	CMP.L	#'patt',D0
 	BEQ.B	.l1
-	MOVE.L	SongPosition(PC),CurrPos
-.l1
+	MOVE.L	SongPosition(PC),CurrPos		
+.l1	
 	MOVE.L	SongDataPtr(PC),A0
 	TST.W	StepPlayEnable
 	BNE.B	.l2
@@ -24147,12 +24248,12 @@ IntMusic
 	MOVE.L	Counter(PC),D0
 	CMP.L	CurrSpeed(PC),D0
 	BLO.B	NoNewNote
-.l2	CLR.L	Counter
+.l2	CLR.L	Counter	
 	TST.B	PattDelayTime2
 	BEQ.B	GetNewNote
 	BSR.B	NoNewAllChannels
 	BRA.W	dskip
-
+		
 NoNewNote
 	BSR.B	NoNewAllChannels
 	BRA.W	NoNewPositionYet
