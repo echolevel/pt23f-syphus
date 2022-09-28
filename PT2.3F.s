@@ -21604,44 +21604,49 @@ gmiexit
 ; https://pastebin.com/76XnLqhj
 
 
-MIDIOutIntHandler		
+MIDIOutIntHandler						
 	MOVE	#$4000,intena(A0)	;disable int.
-	JSR	_LVOForbid(A6)	; turn multitasking off
+	JSR	_LVOForbid(A6)	; turn multitasking off	
 	MOVE	#1,intreq(A0)		;clear intreq bit
+	MOVEM.L	D0-D1/A0-A6,-(SP) ; back up registers
 	MOVE.B	bytesinbuff(PC),D0
 	BEQ.S	exsih			;buffer empty
 	MOVE.L	4(A1),A5		;get buffer read pointer
 	MOVE	#$100,D1		;Stop bit
 	MOVE.B	(A5),D1			;get byte
-	MOVE	D1,$dff030		;and push it out!!
+	MOVE	D1,$dff030		;and push it out!!	
+	move.w	$90,$dff180 				; syphus flash screen
 	ADDQ.L	#1,A5			;add 1
 	CMP.L	A1,A5			;shall we reset ptr??
 	BNE.S	nbufptr			;not yet..
 	LEA	sendbuffer(PC),A5
-nbufptr	SUBQ.B	#1,D0			;one less bytes in buffer
+nbufptr	
+	SUBQ.B	#1,D0			;one less bytes in buffer
 	MOVE.B	D0,bytesinbuff		;remember it
 	MOVE.L	A5,4(A1)		;push new read pointer back
-exsih	JSR	_LVOPermit(A6)	; multitasking back on
+exsih	
+	JSR	_LVOPermit(A6)	; multitasking back on		
 	BGE.S	exsih0
-	MOVE	#$C000,intena(A0)
-exsih0	RTS
-	
+	MOVE	#$C000,intena(A0)	
+exsih0	
+	MOVEM.L (SP)+,D0-D1/A0-A6	;restore registers
+	RTS
+
 ;----- Send data to MIDI out/output buffer -----
 ; A0=ptr to data, D0=length
 
-;move.w	d0,$dff180 ; syphus flash screen
-
-AddMIDIData	
-	TST.B	SerPortAlloc
-	BEQ.S	retamd			; RTS if there's no serial port
-	MOVE.L	A2,-(SP)
-	MOVE.L	4.W,A6	
+AddMIDIData			
+	TST.B	SerPortAlloc	
+	BEQ.S	retamd			; RTS if there's no serial port	
+	MOVE.L	A2,-(SP) ; stack these	
+	MOVE.L	4.W,A6				
 	MOVE	#$4000,$DFF09A ; disable interrupts
 	JSR		_LVOForbid(A6) ; disable multitasking
 	MOVE.B	bytesinbuff(pc),D1	
 	BNE.S	noTBEreq
 	MOVE	#$8001,$DFF09C ; request TBE (Transmit Buffer Empty)
-
+	;JSR		MIDIOutIntHandler			
+	
 noTBEreq	
 	LEA		buffptr(PC),A2 	; end of buffer (ptr)
 	MOVE.L  (A2),A1			; buffer pointer
@@ -21665,14 +21670,13 @@ noresbuffptr
 	SUBQ.B	#1,D0	
 	BNE.S	adddataloop	
 	MOVE.L	A1,(A2)		;push new buffer ptr back	
-overflow	
+overflow		
 	JSR	_LVOPermit(A6)	; enable multitasking again	
-	BGE.S	retamd1	
+	;BGE.S	retamd1		
 	MOVE	#$C000,$DFF09A	;enable interrupts again
-retamd1		
-	MOVE.L	(SP)+,A2 ; 
+retamd1			
+	MOVE.L	(SP)+,A2 ; restore these		
 retamd	RTS
-
 
 	
 PrevTBE		dc.l 0
@@ -24236,6 +24240,8 @@ audchan4temp
 	dc.w $0008	; voice #4 DMA bit
 	dcb.b 34
 
+;move.w	#$30,$dff180 ; syphus flash screen
+
 IntMusic	
 	MOVEM.L	D0-D7/A0-A6,-(SP)
 	MOVE.L	RunMode(PC),D0	
@@ -24243,24 +24249,27 @@ IntMusic
 	CMP.L	#'patt',D0
 	BEQ.B	.l1
 	MOVE.L	SongPosition(PC),CurrPos			
-.l1		; syphus - This is where I want to fire MIDI clock	
-	MOVE.L	SongDataPtr(PC),A0	
+.l1	; syphus - This is where I want to fire MIDI clock pulses
+
+	MOVEM.L	D0-D7/A0-A6,-(SP)		; MIDI Stack these registers first	
+	MOVE.B	#$f8,MidiOutByte
+	LEA		MidiOutByte,A0		; MIDI sync byte  f8: Timing Clock, fa: start, fb: continue, fc: stop	
+	MOVE.B	#1,D0					; MIDI sync byte message length	
+	JSR		AddMIDIData				; MIDI output				
+	move.w	d0,$dff180 				; syphus flash screen
+	MOVEM.L	(SP)+,D0-D7/A0-A6 		; MIDI Restore from the stack	
+	
+	MOVE.L	SongDataPtr(PC),A0		
 	TST.W	StepPlayEnable
-	BNE.B	.l2	
-	;MOVEM.L	D0-D7/A0-A6,-(SP)	; MIDI Save these to the stack first	
-	;MOVE.B	#$f8,(A0)	; MIDI sync byte  f8: Timing Clock, fa: start, fb: continue, fc: stop	
-	;MOVE.B	#1,D0		; MIDI byte length
-	;JSR		AddMIDIData	; MIDI output
-	;move.w	#$30,$dff180 ; syphus flash screen
-	;MOVEM.L	(SP)+,D0-D7/A0-A6 ; MIDI Restore from the stack
-	ADDQ.L	#1,Counter
-	MOVE.L	Counter(PC),D0
-	CMP.L	CurrSpeed(PC),D0			
+	BNE.B	.l2		
+	ADDQ.L	#1,Counter			
+	MOVE.L	Counter(PC),D0	
+	CMP.L	CurrSpeed(PC),D0				
 	BLO.B	NoNewNote			
-.l2	CLR.L	Counter	
-	TST.B	PattDelayTime2	
-	BEQ.B	GetNewNote
-	BSR.B	NoNewAllChannels	
+.l2	CLR.L	Counter		
+	TST.B	PattDelayTime2		
+	BEQ.B	GetNewNote	
+	BSR.B	NoNewAllChannels		
 	BRA.W	dskip
 		
 NoNewNote
@@ -24278,10 +24287,10 @@ NoNewAllChannels
 	LEA	$DFF0C0,A5
 	BSR.W	CheckEffects
 	LEA	audchan4temp(PC),A6
-	LEA	$DFF0D0,A5
+	LEA	$DFF0D0,A5	
 	BRA.W	CheckEffects
 
-GetNewNote
+GetNewNote	
 	LEA	12(A0),A3
 	LEA	sd_pattpos(A0),A2
 	LEA	sd_patterndata(A0),A0
@@ -27058,6 +27067,9 @@ WaitRasterLines1	ds.w	1
 WaitRasterLines2	ds.w	1
 VolToolBoxShown	ds.b	1
 ShowRasterbar	ds.b	1
+
+; MIDI out
+MidiOutByte		ds.b	1
 
 END
 
