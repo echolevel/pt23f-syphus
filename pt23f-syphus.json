@@ -1,0 +1,45 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"amiga-assembly.cstool": "vbin/cstool",
+		"amiga-assembly.vasm": {
+			"enabled": true,
+			"file": "vbin/vasmm68k_mot",
+			"options": [
+				"-m68000",
+				"-Fhunk",
+				"-linedebug"
+			]
+		},
+		"amiga-assembly.vlink": {
+			"enabled": true,
+			"file": "vbin/vlink",
+			"includes": "*.s",
+			"excludes": "",
+			"exefilename": "../uae/dh0/PT2",
+			"options": [
+				"-bamigahunk",
+				"-Bstatic"
+			]
+		},
+		"amiga-assembly.adfgenerator": {
+			"ADFToolsParentDir": "vbin",
+			"sourceRootDir": "uae/dh0",
+			"outputADFFile": "./build/disk.adf",
+			"includes": "**/*",
+			"excludes": "**/.*"
+		},
+		"editor.formatOnSave": true,
+		"amiga-assembly.binDir": "C:\\Users\\echol\\Sites\\pt23f-syphus\\vbin",
+		"amiga-assembly.format.dataToCommentsDistance": 0,
+		"amiga-assembly.format.instructionToDataDistance": 0,
+		"amiga-assembly.format.labelToInstructionDistance": 0,
+		"amiga-assembly.format.operatorToValueDistance": 0,
+		"amiga-assembly.format.useTabs": true,
+		"amiga-assembly.format.variableToOperatorDistance": 0
+	}
+}

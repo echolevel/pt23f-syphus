@@ -5240,7 +5240,7 @@ DirText		dc.b " (DIR)"
 
 ;---- Play Song ----
 
-PlaySong
+PlaySong	
 	MOVEQ	#0,D0
 SongFrom
 	BSR.W	StopIt
@@ -5259,16 +5259,19 @@ wfbu1	BTST	#6,$BFE001	; left mouse button
 	CLR.W	PatternTicks
 	CLR.L	TimerTicks
 	BSR.W	ShowTimer
-	MOVE.L	#'patp',RunMode
+	MOVE.L	#'patp',RunMode	
 	CLR.W	DidQuantize
 	MOVE.L	#-1,LongFFFF
+	;MOVE.B	#$fa,(A0)	; MIDI sync byte  f8: Timing Clock, fa: start, fb: continue, fc: stop
+	;MOVE.B	#1,D0		; MIDI byte length
+	;JSR		AddMIDIData	; MIDI output
 	BSR.W	SetScrPatternPos
 SetPlayPosition
 	MOVE.L	CurrPos,D0
 	MOVE.L	SongDataPtr,A0
 	CMP.B	sd_numofpatt(A0),D0
 	BHS.B	SongPosToZero
-	MOVE.L	CurrPos,SongPosition
+	MOVE.L	CurrPos,SongPosition	
 	RTS
 
 SongPosToZero
@@ -5278,12 +5281,9 @@ SongPosToZero
 
 ;---- Play Pattern ----
 
-PlayPattern			
-	MOVE.W	MidiStartMsg,A0 
-	MOVE.W	MidiMsgLen,D0
-	JSR		AddMIDIData		
-	CMP.W	#8,CurrScreen
-	BEQ.W	lbC009F6C	
+PlayPattern					
+	CMP.W	#8,CurrScreen	
+	BEQ.W	lbC009F6C		
 ppskip
 	MOVEQ	#0,D0
 PattFrom
@@ -5300,12 +5300,15 @@ wfbu2	BTST	#6,$BFE001	; left mouse button
 	CLR.B	RawKeyCode
 	CLR.B	SaveKey
 	MOVE.L	#'patt',RunMode
+	MOVE.B	#$fb,(A0)	; MIDI sync byte  f8: Timing Clock, fa: start, fb: continue, fc: stop
+	MOVE.B	#1,D0		; MIDI byte length
+	JSR		AddMIDIData	; MIDI output
 	BSR.W	SetPlayPtrCol		
 	RTS
 
-MidiStartMsg	dc.w	$f8 
-MidiMsgLen		dc.w	1
 
+
+	cnop 0,4
 ;---- Record Pattern/Song ----
 
 RecordPattern
@@ -10747,17 +10750,17 @@ PrintSong3
 	MOVE.L	SavIt(PC),A0
 	MOVE.W	22(A0),D0
 	ADD.W	D0,D0
-	LEA	ascii.MSG4,A0
+	LEA	ascii_MSG4,A0
 	JSR	IntToHexASCII
 	MOVE.L	SavIt(PC),A0
 	MOVE.W	26(A0),D0
 	ADD.W	D0,D0
-	LEA	ascii.MSG5,A0
+	LEA	ascii_MSG5,A0
 	JSR	IntToHexASCII
 	MOVE.L	SavIt(PC),A0
 	MOVE.W	28(A0),D0
 	ADD.W	D0,D0
-	LEA	ascii.MSG6,A0
+	LEA	ascii_MSG6,A0
 	JSR	IntToHexASCII
 	MOVE.L	DOSBase,A6
 	MOVE.L	FileHandle,D1
@@ -14154,7 +14157,7 @@ chabno
 	MOVEQ	#-1,D7
 	RTS
 
-StopIt
+StopIt	
 	BSR.B	DoStopIt
 	CLR.W	$DFF0A8	; clear voice #1 volume
 	CLR.W	$DFF0B8	; clear voice #2 volume
@@ -14189,7 +14192,7 @@ dsiskip
 	CLR.L	EditMode
 	CLR.L	RunMode
 	CLR.B	PattDelayTime
-	CLR.B	PattDelayTime2
+	CLR.B	PattDelayTime2	
 	BRA.W	RestoreEffects2
 
 UsePreset
@@ -15301,7 +15304,6 @@ UpdateMod
 	AND.W	#$1F,D1	
 	;LEA	VibratoTable(PC),A0
 	LEA 	VibratoTable,A0 ; syphus - fixes an out-of-range 16 bit error caused by addition of MIDI Out code
-	ADD.L 	(PC),A0
 	MOVEQ	#0,D0
 	MOVE.B	(A0,D1.W),D0
 	LSR.B	#2,D0
@@ -21611,7 +21613,7 @@ MIDIOutIntHandler
 	MOVE.L	4(A1),A5		;get buffer read pointer
 	MOVE	#$100,D1		;Stop bit
 	MOVE.B	(A5),D1			;get byte
-	MOVE	D1,$030(A0)		;and push it out!!
+	MOVE	D1,$dff030		;and push it out!!
 	ADDQ.L	#1,A5			;add 1
 	CMP.L	A1,A5			;shall we reset ptr??
 	BNE.S	nbufptr			;not yet..
@@ -21631,43 +21633,44 @@ exsih0	RTS
 
 AddMIDIData	
 	TST.B	SerPortAlloc
-	BEQ.S	retamd
+	BEQ.S	retamd			; RTS if there's no serial port
 	MOVE.L	A2,-(SP)
-	MOVE.L	4.W,A6
+	MOVE.L	4.W,A6	
 	MOVE	#$4000,$DFF09A ; disable interrupts
 	JSR		_LVOForbid(A6) ; disable multitasking
 	MOVE.B	bytesinbuff(pc),D1	
 	BNE.S	noTBEreq
-	MOVE	#$8001,$DFF09C ; request TBE	
+	MOVE	#$8001,$DFF09C ; request TBE (Transmit Buffer Empty)
 
-noTBEreq
+noTBEreq	
 	LEA		buffptr(PC),A2 	; end of buffer (ptr)
 	MOVE.L  (A2),A1			; buffer pointer
 
 adddataloop
-	MOVE.B	(A0)+,D1	;get byte
+	MOVE.B	(A0)+,D1	;get byte	
 	BPL.S	norscheck	;this isn't a status byte
-	CMP.B	#$EF,D1		;forget system messages
+	CMP.B	#$EF,D1		;forget system messages	
 	BHI.S	norscheck
 	CMP.B	lastcmdbyte(PC),D1 ;same as previos status byte??
 	BEQ.S	samesb		;yes, skip
-	MOVE.B	D1,lastcmdbyte	;no, don't skip but remember!!
+	MOVE.B	D1,lastcmdbyte	;no, don't skip but remember!!	
 
-norscheck
+norscheck	
 	MOVE.B	D1,(A1)+	;push it to midi send buffer
 	ADDQ.B	#1,bytesinbuff
-samesb	CMP.L	A2,A1	;end of buffer??
-	BNE.S	noresbuffptr	;no, no!!
+samesb	CMP.L	A2,A1	;end of buffer??	
+	BNE.S	noresbuffptr	;no, no!!	
 	LEA	sendbuffer(pc),a1 ;better reset it to avoid trashing
-noresbuffptr
-	SUBQ.B	#1,D0
-	BNE.S	adddataloop
-	MOVE.L	A1,(A2)		;push new buffer ptr back
-overflow
-	JSR	_LVOPermit(A6)	; enable multitasking again
-	BGE.S	retamd1
+noresbuffptr	
+	SUBQ.B	#1,D0	
+	BNE.S	adddataloop	
+	MOVE.L	A1,(A2)		;push new buffer ptr back	
+overflow	
+	JSR	_LVOPermit(A6)	; enable multitasking again	
+	BGE.S	retamd1	
 	MOVE	#$C000,$DFF09A	;enable interrupts again
-retamd1	MOVE.L	(SP)+,A2
+retamd1		
+	MOVE.L	(SP)+,A2 ; 
 retamd	RTS
 
 
@@ -24233,25 +24236,31 @@ audchan4temp
 	dc.w $0008	; voice #4 DMA bit
 	dcb.b 34
 
-IntMusic	; syphus - Is this where I should fire MIDI writes?	
+IntMusic	
 	MOVEM.L	D0-D7/A0-A6,-(SP)
 	MOVE.L	RunMode(PC),D0	
 	BEQ.W	NoNewPositionYet
 	CMP.L	#'patt',D0
 	BEQ.B	.l1
-	MOVE.L	SongPosition(PC),CurrPos		
-.l1	
-	MOVE.L	SongDataPtr(PC),A0
+	MOVE.L	SongPosition(PC),CurrPos			
+.l1		; syphus - This is where I want to fire MIDI clock	
+	MOVE.L	SongDataPtr(PC),A0	
 	TST.W	StepPlayEnable
-	BNE.B	.l2
+	BNE.B	.l2	
+	;MOVEM.L	D0-D7/A0-A6,-(SP)	; MIDI Save these to the stack first	
+	;MOVE.B	#$f8,(A0)	; MIDI sync byte  f8: Timing Clock, fa: start, fb: continue, fc: stop	
+	;MOVE.B	#1,D0		; MIDI byte length
+	;JSR		AddMIDIData	; MIDI output
+	;move.w	#$30,$dff180 ; syphus flash screen
+	;MOVEM.L	(SP)+,D0-D7/A0-A6 ; MIDI Restore from the stack
 	ADDQ.L	#1,Counter
 	MOVE.L	Counter(PC),D0
-	CMP.L	CurrSpeed(PC),D0
-	BLO.B	NoNewNote
+	CMP.L	CurrSpeed(PC),D0			
+	BLO.B	NoNewNote			
 .l2	CLR.L	Counter	
-	TST.B	PattDelayTime2
+	TST.B	PattDelayTime2	
 	BEQ.B	GetNewNote
-	BSR.B	NoNewAllChannels
+	BSR.B	NoNewAllChannels	
 	BRA.W	dskip
 		
 NoNewNote
@@ -24599,7 +24608,7 @@ waiteol5
 
 dskip	TST.L	RunMode
 	BEQ.B	dskipx
-	JSR	SetPatternPos
+	JSR	SetPatternPos	
 dskipx	MOVE.L	PatternPosition(PC),D0
 	LSR.L	#4,D0
 	MOVE.W	D0,ScrPattPos
@@ -24637,7 +24646,7 @@ NextPosition
 	LSL.W	#4,D0
 	MOVE.L	D0,PatternPosition
 	CLR.B	PBreakPosition
-	CLR.B	PosJumpAssert
+	CLR.B	PosJumpAssert	
 	CMP.L	#'patp',RunMode
 	BNE.B	NoNewPositionYet
 	ST	PattRfsh
@@ -24660,7 +24669,7 @@ NextPosition
 NoNewPositionYet
 	TST.B	PosJumpAssert
 	BNE.B	NextPosition
-	MOVEM.L	(SP)+,D0-D7/A0-A6
+	MOVEM.L	(SP)+,D0-D7/A0-A6	
 	RTS
 
 CheckEffects
@@ -25614,9 +25623,9 @@ PtotText	dc.b	9
 PattXText1	dc.b	"0"
 PattXText2	dc.b	"0 : "
 PpText		dc.b	'                        0000'
-ascii.MSG4	dc.b	'  0000'
-ascii.MSG5	dc.b	'  0000'
-ascii.MSG6	dc.b	'    ',$D,$A
+ascii_MSG4	dc.b	'  0000'
+ascii_MSG5	dc.b	'  0000'
+ascii_MSG6	dc.b	'    ',$D,$A
 PnText2		dc.b	"        "
 	cnop 0,2
 		dc.b	0

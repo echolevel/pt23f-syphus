@@ -1,3 +1,19 @@
 {
-    "files.encoding": "iso88591"
+    "files.encoding": "iso88591",
+    "amiga-assembly.binDir": "C:\\Users\\echol\\Sites\\pt23f-syphus\\vbin",
+    "amiga-assembly.downloadBinaries": true,
+    "amiga-assembly.format.useTabs": false,
+    "amiga-assembly.format.instructionToDataDistance": 1,
+    "amiga-assembly.format.labelToInstructionDistance": 1,
+    "amiga-assembly.format.dataToCommentsDistance": 1,
+    "amiga-assembly.format.operatorToValueDistance": 1,
+    "amiga-assembly.format.variableToOperatorDistance": 1,
+    "amiga-assembly.format.preferredCommentPosition": 1,
+    "amiga-assembly.format.preferredInstructionPosition": 1,
+    "[amiga.assembly]": {
+        "editor.formatOnSave": false
+    },
+    "[amiga-assembly]": {
+        "editor.formatOnSave": false
+    }
 }
